@@ -1,0 +1,29 @@
+{
+  "last_activity": "2026-04-12T11:13:23.383947",
+  "system_stats": {
+    "system_info": {
+      "project_root": "D:/teste",
+      "platform": "Windows-10-10.0.19045-SP0",
+      "python_version": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+      "cpu_percent": 25.0,
+      "memory_percent": 89.3,
+      "disk_usage": 70.3,
+      "thread_count": 5,
+      "uptime": "2026-04-12T11:13:23.383947"
+    },
+    "ai_status": {
+      "models_available": {
+        "gemini": false,
+        "qwen": false
+      },
+      "database_connected": true
+    },
+    "excel_status": {
+      "available": true
+    },
+    "kernel_status": {
+      "initialized": true
+    },
+    "timestamp": "2026-04-12T11:13:23.383947"
+  }
+}
