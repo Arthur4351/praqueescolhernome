@@ -1,0 +1,11 @@
+{
+  "hardware_limits": {
+    "max_files_per_batch": 50,
+    "max_excel_rows_per_read": 1000,
+    "processing_delay_ms": 100
+  },
+  "sinonimos_atividade": ["atividade", "servicos", "serviço", "tarefa", "entrada", "saida", "saída"],
+  "tema": "ciano_escuro",
+  "notificacoes": true,
+  "GROQ_API_KEY": "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"
+}

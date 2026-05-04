@@ -1,0 +1,7 @@
+{
+    "RENAME_FOLDER": ["renomear", "renomeie", "mudar", "alterar", "nome", "pasta", "pastas", "modificar"],
+    "CREATE_FOLDER": ["criar", "crie", "nova", "fazer", "pasta", "pastas", "diretorio", "construir"],
+    "DELETE_FOLDER": ["deletar", "apagar", "excluir", "remover", "destruir", "pasta", "pastas", "limpar"],
+    "MOVE_FOLDER": ["mover", "mova", "transferir", "levar", "pasta", "pastas", "colocar"],
+    "INJECT_FORMULA": ["inserir", "colocar", "injetar", "aplicar", "escrever", "formula", "formulas", "calculo", "funcao", "excel"]
+}
