@@ -1,23 +1,33 @@
-# 1. Bloquear absolutamente tudo por padrão
-*
+# Compilação do PyInstaller
+build/
+dist/
+*.spec
 
-# 2. Ignorar pastas inteiras e subpastas do radar do Git
-/*/
+# Cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
 
-# 3. ABRIR EXCEÇÕES: Permitir apenas o que for explicitamente listado abaixo
-!# Se quiser liberar algum arquivo ou pasta específica, use o "!" antes do nome
+# IDEs e Editores
+.vscode/
+.idea/
 
-# Liberar o próprio arquivo .gitignore
-!.gitignore
+# Chaves e Arquivos Sensíveis
+config.json
+brain.json
+erros_conhecidos.txt
+ai_usage.json
+long_term_memory.json
 
-# Liberar os arquivos Python principais da Sophia na raiz
-!*.py
-
-# Liberar a imagem de visualização se você quiser
-!SOPHIA.png
-
-# Liberar pastas específicas de código (e tudo dentro delas)
-!core/
-!core/**
-!dynamic_skills/
-!dynamic_skills/**
+# Arquivos de Teste do Usuário
+*.xlsx
+*.xlsm
+*.csv
+fotos/
+fotos_teste_por_aba/
+relatorios_n8n/
+relatorios/
+relatorios_sandbox/
+dummy_destino/
+models/
+brawltimeninja/
