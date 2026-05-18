@@ -1,0 +1,23 @@
+# 1. Bloquear absolutamente tudo por padrão
+*
+
+# 2. Ignorar pastas inteiras e subpastas do radar do Git
+/*/
+
+# 3. ABRIR EXCEÇÕES: Permitir apenas o que for explicitamente listado abaixo
+!# Se quiser liberar algum arquivo ou pasta específica, use o "!" antes do nome
+
+# Liberar o próprio arquivo .gitignore
+!.gitignore
+
+# Liberar os arquivos Python principais da Sophia na raiz
+!*.py
+
+# Liberar a imagem de visualização se você quiser
+!SOPHIA.png
+
+# Liberar pastas específicas de código (e tudo dentro delas)
+!core/
+!core/**
+!dynamic_skills/
+!dynamic_skills/**
