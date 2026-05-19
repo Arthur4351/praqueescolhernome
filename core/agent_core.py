@@ -6,12 +6,23 @@ from core.file_handler import FileHandler
 from core.metadata_inspector import MetadataInspector
 from core.excel_engine import ExcelEngine
 
+# Carrega .env com prioridade sobre config.json
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
+
 class SophiaAgentCore:
     def __init__(self, config_path: str = "config.json"):
         self.config_path = config_path
         self.config = self._load_config()
         self.keywords = self.config.get("sinonimos_atividade", ["atividade", "servico"])
-        self.groq_api_key = self.config.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+        self.groq_api_key = (
+            os.getenv("GROQ_API_KEY_1")
+            or os.getenv("GROQ_API_KEY")
+            or self.config.get("GROQ_API_KEY")
+        )
         from core.intent_parser import IntentParser
         self.nlp = IntentParser()
         self.pending_intents = []
@@ -83,8 +94,8 @@ class SophiaAgentCore:
             if "coluna_desejada" in actions[0]: params["coluna_desejada"] = actions[0]["coluna_desejada"]
             if "coluna" in actions[0]: params["coluna"] = actions[0]["coluna"]
             if len(params) == 1:
-                local_params = self.nlp.extract_query_params(user_input)
-                params.update(local_params)
+                # Sem parâmetros extras — AIRouter já extraiu via LLM
+                pass
             if tipo == "QUERY_EXCEL":
                 alvo = params.get("alvo", "")
                 coluna = params.get("coluna_desejada", "")

@@ -8,6 +8,13 @@ from core.ocr_engine import OCREngine
 import pandas as pd
 from core.file_handler import FileHandler
 
+# Carrega .env para ter whatsapp_telefone e apikey sem hardcode
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 def remover_acentos(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').upper()
@@ -408,81 +415,80 @@ class SophiaExecutor:
                 try:
                     nome_saida = destino_path / f"Relatorio_{uuid.uuid4().hex[:4]}.xlsm"
                     wb.save(nome_saida)
-                    
-                    # Agora podemos liberar os streams
+
+                    # Libera streams após o save
                     for s in streams_manter_vivos:
                         try: s.close()
                         except: pass
                     del streams_manter_vivos
-                    
+
                     log_func(f"🎉 <b>CONCLUÍDO!</b> {fotos_total_geral} fotos injetadas → <b>{nome_saida.name}</b>")
-                    
-                    # Ordem do Usuário: Gerar relatório automático ao fim
+
+                    # Gera relatório automático de faltas
                     try:
                         from core.relatorio_engine import gerar_relatorio_faltas
                         import json
-                        
+
                         log_func("📊 <b>SOPHIA:</b> Gerando relatório de faltas automático...")
                         resumo, dados = gerar_relatorio_faltas(dados_relatorio)
                         log_func(resumo)
-                        
-                        # Salvar JSON para o n8n
+
+                        # Salva JSON para o n8n
                         rel_dir = Path("relatorios_n8n")
                         rel_dir.mkdir(exist_ok=True)
                         json_path = rel_dir / f"relatorio_faltas_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                         with open(json_path, 'w', encoding='utf-8') as f:
                             json.dump(dados, f, indent=4, ensure_ascii=False)
-                            
+
                         log_func(f"💾 JSON salvo em: {json_path.absolute()}")
-                        
-                        # Ordem do Usuário: Enviar para WhatsApp via CallMeBot
+
+                        # Envia WhatsApp: credenciais EXCLUSIVAMENTE via .env ou config.json
                         try:
                             import requests
                             from urllib.parse import quote
-                            
+
                             log_func("🌐 <b>SOPHIA:</b> Enviando relatório direto para o seu WhatsApp via CallMeBot...")
-                            
-                            telefone = "557399310836"
-                            apikey = "4667834"
+
+                            telefone = os.getenv("WHATSAPP_TELEFONE", "")
+                            apikey = os.getenv("WHATSAPP_APIKEY", "")
+
                             config_path = Path(__file__).parent / "config.json"
                             if config_path.exists():
                                 try:
-                                    import json
                                     with open(config_path, "r", encoding="utf-8") as fc:
                                         cfg = json.load(fc)
-                                        telefone = cfg.get("whatsapp_telefone", telefone)
-                                        apikey = cfg.get("whatsapp_apikey", apikey)
+                                        telefone = telefone or cfg.get("whatsapp_telefone", "")
+                                        apikey = apikey or cfg.get("whatsapp_apikey", "")
                                 except Exception: pass
-                                
+
+                            if not telefone or not apikey:
+                                log_func("⚠️ WhatsApp não configurado. Adicione WHATSAPP_TELEFONE e WHATSAPP_APIKEY no .env")
+                                return resumo
+
                             texto_codificado = quote(resumo)
-                            
                             url_callmebot = f"https://api.callmebot.com/whatsapp.php?phone={telefone}&text={texto_codificado}&apikey={apikey}"
-                            
+
                             resp = requests.get(url_callmebot, timeout=10)
                             if resp.status_code in [200, 201]:
                                 log_func("✅ Relatório enviado com sucesso para o seu celular!")
                             else:
                                 log_func(f"⚠️ Falha ao enviar WhatsApp. Status: {resp.status_code}")
-                            
+
                             return resumo
                         except Exception as e_net:
                             log_func(f"⚠️ Erro de rede ao enviar WhatsApp: {e_net}")
                             return resumo
-                            
+
                     except Exception as e_rel:
                         log_func(f"⚠️ Não consegui gerar o relatório automático: {e_rel}")
                         return "Falha na geração do relatório."
-                        
+
                 except PermissionError:
                     log_func('❌ ERRO: Feche o Excel antes de salvar!')
                     return "Erro: Excel estava aberto."
             else:
                 log_func("⚠️ Nenhuma foto foi injetada. Verifique se os nomes das pastas batem com as abas da planilha.")
                 return "Nenhuma foto injetada."
-
-            wb.close()
-            del wb
-            gc.collect()
 
         except Exception as e:
             if self.autonomous_mode:
@@ -496,8 +502,17 @@ class SophiaExecutor:
                     return "Falha abortada de forma segura pelo Sandbox. Aguardando revisão manual do patch."
                 else:
                     log_func("❌ [AUTO-EVOLUÇÃO] A auto-cura falhou ou não pôde ser validada de forma estável.")
-            
+
             log_func(f"❌ Erro Crítico no motor: {e}")
+
+        finally:
+            # Garante que o workbook seja sempre fechado e a memória liberada
+            try:
+                if 'wb' in locals() and wb is not None:
+                    wb.close()
+                    del wb
+            except Exception:
+                pass
             gc.collect()
 
     def auditar_efetivo(self, pasta_efetivo: str, excel_path: str, log_func):

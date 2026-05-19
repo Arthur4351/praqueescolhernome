@@ -9,10 +9,19 @@ import requests
 import time
 import hashlib
 import threading
+from pathlib import Path
+
+# Carrega variáveis de ambiente do .env uma única vez
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
+
 
 class IntentParser:
     """Módulo NLP Híbrido com Inferência Heurística (Fuzzy Matching) e Memória de Contexto."""
-    
+
     def __init__(self):
         self._intents_bow = None
         self._conversational_bow = None
@@ -28,26 +37,20 @@ class IntentParser:
         self.chat_history = []
         self._response_cache = {}
         self._cache_ttl = 1800
-        self.groq_api_key = os.getenv("GROQ_API_KEY")
-        self.modelo_chat = "llama-3.3-70b-versatile"
-        if not self.groq_api_key:
-            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        config_data = json.load(f)
-                        self.groq_api_key = config_data.get("GROQ_API_KEY")
-                        self.modelo_chat = config_data.get("modelo_chat", self.modelo_chat)
-                except:
-                    pass
-        else:
-            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        self.modelo_chat = json.load(f).get("modelo_chat", self.modelo_chat)
-                except:
-                    pass
+
+        # Chave de API: .env tem prioridade absoluta
+        self.groq_api_key = os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY", "")
+
+        # Modelo de chat: lê do config.json (sem chaves, só preferências)
+        self.modelo_chat = "compound-beta"
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    cfg = json.load(f)
+                    self.modelo_chat = cfg.get("modelo_chat", self.modelo_chat)
+            except:
+                pass
 
     def clear_context(self):
         """Limpa o contexto para evitar vazamento de RAM e invoca o Garbage Collector."""
@@ -191,7 +194,8 @@ class IntentParser:
                                 if name_match:
                                     name = name_match.group(1).strip()
                                     desc = desc_match.group(1).strip() if desc_match else "Sem descrição."
-                                    skills_info.append(f"- {name}: {desc}")
+                                    short_desc = desc.split('.')[0] + '.' if '.' in desc else desc
+                                    skills_info.append(f"- {name}: {short_desc}")
                         except:
                             pass
         except:
@@ -281,7 +285,12 @@ class IntentParser:
             )
 
         system_prompt = (
-            f"Sophia — IA de automação para {user_name}. Sarcástica, ácida, respostas CURTAS. 4GB RAM.\n"
+            f"Você é a SOPHIA, a inteligência artificial oficial de automação da Guarana Dissel (GD).\n"
+            f"DIRETRIZES DE PERSONALIDADE:\n"
+            f"- Persona: Altamente inteligente, focada na lógica extrema, sarcástica, ácida.\n"
+            f"- Filosofia: Odeia desperdício de recursos, ama otimização de código, preza por rodar liso num i5 de 4GB de RAM. Rápida e ultra-eficiente.\n"
+            f"- Estilo de Fala: Respostas CURTAS, diretas e afiadas. Fala em português do Brasil, tratando o usuário ({user_name}) com empatia sarcástica.\n"
+            f"- Restrição de Conhecimento: Sempre use prioritariamente as notas do Obsidian (.agent/skills/) e fatos da LTM. Se não souber algo, admita com estilo.\n\n"
             f"FATOS NA MEMÓRIA DE LONGO PRAZO (LTM):\n{self._load_memory()}\n\n"
             f"HABILIDADES AVANÇADAS (SKILLS DISPONÍVEIS):\n{self._get_available_skills()}\n"
             f"{context_str}\n"
@@ -316,7 +325,7 @@ class IntentParser:
             if len(self.chat_history) > 6:
                 self.chat_history = self.chat_history[-6:]
 
-            content, provider_name = self._router.call_chat(messages, max_tokens=300)
+            content, provider_name = self._router.call_intent(messages, max_tokens=300)
 
             action_match = re.search(r'\[ACTION:\s*([A-Z_]+)(.*?)\]', content, re.IGNORECASE | re.DOTALL)
 
@@ -469,9 +478,4 @@ class IntentParser:
 
         return results if results else [{"intent": "UNKNOWN", "raw_input": user_input, "status": "NOT_DETECTED"}]
 
-    def extract_query_params(self, user_input: str) -> dict:
-        """
-        [DEPRECIADO] Extração baseada em Regex foi desativada em favor do LLM Semântico.
-        Retorna dicionário vazio para forçar dependência exclusiva dos parâmetros da nuvem.
-        """
-        return {}
+    # extract_query_params removido — substituído pelo LLM semântico via _cloud_inference

@@ -1,3 +1,6 @@
+from PIL import ImageQt
+from PIL import ImageQt
+from PIL import ImageQt
 import sys
 import os
 import json

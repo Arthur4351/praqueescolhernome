@@ -1,33 +1,71 @@
-# Compilação do PyInstaller
-build/
-dist/
-*.spec
+# ==============================
+# SOPHIA AI — .gitignore
+# ==============================
 
-# Cache do Python
+# Segurança: nunca commitar credenciais
+.env
+*.env
+*.env.local
+
+# Config com segredos
+config.json
+
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+dist/
+build/
+*.spec.bak
 
-# IDEs e Editores
-.vscode/
-.idea/
+# Modelos LLM locais (grandes demais)
+models/*.gguf
+models/*.bin
+models/*.ggml
 
-# Chaves e Arquivos Sensíveis
-config.json
-brain.json
+# Output do sistema
+dynamic_skills/
+relatorios/
+relatorios_n8n/
+relatorios_sandbox/
+fotos_teste_por_aba/
+dummy_destino/
+
+# Backups automáticos
+*.bak
+
+# PyInstaller
+dist/
+build/
+
+# Logs e erros
 erros_conhecidos.txt
 ai_usage.json
+
+# Bancos de dados locais / Memória local da IA
+brain.json
 long_term_memory.json
 
-# Arquivos de Teste do Usuário
+# Planilhas locais do usuário (binários de relatórios)
 *.xlsx
 *.xlsm
-*.csv
-fotos/
+planilhas/
 fotos_teste_por_aba/
-relatorios_n8n/
-relatorios/
-relatorios_sandbox/
 dummy_destino/
-models/
-brawltimeninja/
+
+# IDE e Build especificação
+.vscode/
+.idea/
+*.suo
+*.user
+SOPHIA.spec
+
+# Dados de cache / Metadados temporários de subagentes do Obsidian
+.agent/.shared/
+dynamic_skills/
+relatorios/
+relatorios_n8n/
+relatorios_sandbox/

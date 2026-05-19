@@ -8,13 +8,30 @@ import ast
 from pathlib import Path
 
 class CodeInspector:
+    # Módulos de terceiros/stdlib que devemos ignorar no traceback
+    _IGNORE_PATTERNS = [
+        "site-packages", "lib\\python", "lib/python",
+        "PySide6", "openpyxl", "PIL", "pandas",
+        "<frozen", "importlib",
+    ]
+
     def __init__(self, log_func):
         self.log_func = log_func
+        # Raiz do projeto (dois níveis acima deste arquivo)
+        self.project_root = str(Path(__file__).parent.parent.resolve())
+
+    def _is_project_file(self, filepath: str) -> bool:
+        """Verifica se o arquivo pertence ao projeto (não é biblioteca externa)."""
+        fp = filepath.replace("\\", "/")
+        for pat in self._IGNORE_PATTERNS:
+            if pat.replace("\\", "/") in fp:
+                return False
+        return self.project_root.replace("\\", "/") in fp or fp.endswith(".py")
 
     def parse_traceback(self, tb_string):
         """
-        Analisa a string de traceback e retorna detalhes do arquivo e linha falhos.
-        Foca no último frame que pertence ao projeto (não bibliotecas padrão).
+        Analisa o traceback e retorna o último arquivo do PROJETO que falhou.
+        Agora reconhece qualquer .py do projeto, não apenas minhas_habilidades.py.
         """
         self.log_func("🔍 [CodeInspector] Analisando pilha de falha...")
         linhas = tb_string.strip().split('\n')
@@ -22,22 +39,37 @@ class CodeInspector:
         alvo_linha = None
         alvo_funcao = None
         codigo_falho = None
-        
-        # Encontra o último arquivo relevante da nossa stack
+
+        # Itera de trás para frente para pegar o frame mais próximo da raiz
         for i, linha in enumerate(linhas):
-            if linha.strip().startswith('File "') and 'minhas_habilidades.py' in linha:
-                parts = linha.strip().split('", line ')
-                if len(parts) >= 2:
-                    alvo_arquivo = parts[0].replace('File "', '')
-                    resto = parts[1].split(', in ')
-                    alvo_linha = int(resto[0])
-                    if len(resto) > 1:
-                        alvo_funcao = resto[1]
-                # A próxima linha contém o código que falhou
-                if i + 1 < len(linhas):
-                    codigo_falho = linhas[i+1].strip()
-                    
+            if not linha.strip().startswith('File "'):
+                continue
+            parts = linha.strip().split('", line ')
+            if len(parts) < 2:
+                continue
+            filepath = parts[0].replace('File "', '')
+            if not self._is_project_file(filepath):
+                continue
+
+            resto = parts[1].split(', in ')
+            try:
+                num_linha = int(resto[0])
+            except ValueError:
+                continue
+
+            alvo_arquivo = filepath
+            alvo_linha = num_linha
+            alvo_funcao = resto[1].strip() if len(resto) > 1 else "?"
+            if i + 1 < len(linhas):
+                codigo_falho = linhas[i + 1].strip()
+
+        if alvo_arquivo:
+            self.log_func(
+                f"📍 Arquivo: {Path(alvo_arquivo).name} | "
+                f"Linha: {alvo_linha} | Função: {alvo_funcao}"
+            )
         return alvo_arquivo, alvo_linha, alvo_funcao, codigo_falho
+
 
 class CodeGenerator:
     def __init__(self, log_func):
