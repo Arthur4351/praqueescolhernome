@@ -1,5 +1,6 @@
 import sys, os, re, gc, io
 from PIL import Image, ImageEnhance, ImageOps
+from core.file_handler import FileHandler
 
 if getattr(sys, 'frozen', False): _BASE_DIR = sys._MEIPASS
 else: _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,12 +26,10 @@ class OCREngine:
                     cls._available = True; return True
             try: pytesseract.get_tesseract_version(); cls._available = True; return True
             except Exception as e:
-                with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                    f.write(f"OCREngine: Tesseract nao encontrado. OCR desabilitado. Erro: {e}\n")
+                FileHandler.log_error(f"OCREngine: Tesseract nao encontrado. OCR desabilitado. Erro: {e}")
             cls._available = False; return False
         except Exception as e: 
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"OCREngine: Erro crítico no pytesseract: {e}\n")
+            FileHandler.log_error(f"OCREngine: Erro crítico no pytesseract: {e}")
             cls._available = False; return False
 
     @staticmethod

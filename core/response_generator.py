@@ -1,5 +1,6 @@
 import random
 import datetime
+from core.file_handler import FileHandler
 
 class ResponseGenerator:
     """Módulo de Identidade e Empatia da Sophia (Persona GD - Hash Map O(1) Puro)."""
@@ -137,6 +138,5 @@ class ResponseGenerator:
             f"❌ Ih, minha lógica falhou aqui. Fui fazer <b>{contexto}</b> e o Windows levantou o escudo. Pode dar uma olhada manual?",
             f"❌ Isso é quase tão frustrante quanto lag num jogo competitivo. Tentei <b>{contexto}</b>, mas algo não encaixou."
         ]
-        with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-            f.write(f"[ERRO TÉCNICO] {datetime.datetime.now()}: {contexto} | {erro_tecnico}\n")
+        FileHandler.log_error(f"[ERRO TÉCNICO] {datetime.datetime.now()}: {contexto} | {erro_tecnico}")
         return random.choice(erros_humanizados)

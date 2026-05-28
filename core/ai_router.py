@@ -4,6 +4,7 @@ import requests
 import threading
 from datetime import date
 from pathlib import Path
+from core.file_handler import FileHandler
 
 # Carrega .env automaticamente se disponível
 try:
@@ -38,7 +39,7 @@ class AIRouter:
         TaskType.CHAT:      "llama-3.3-70b-versatile",
         TaskType.CODE:      "llama-3.3-70b-versatile",
         TaskType.REASONING: "groq/compound",
-        TaskType.INTENT:    "llama-3.1-8b-instant",
+        TaskType.INTENT:    "llama-3.3-70b-versatile",
     }
 
     _DEFAULT_PROVIDERS = [
@@ -49,7 +50,7 @@ class AIRouter:
             "modelo": "llama-3.3-70b-versatile",
             "modelo_codigo": "llama-3.3-70b-versatile",
             "modelo_reasoning": "groq/compound",
-            "modelo_intent": "llama-3.1-8b-instant",
+            "modelo_intent": "llama-3.3-70b-versatile",
             "limite_diario_tokens": 500000,
             "ativo": True,
             "prioridade": 1
@@ -61,7 +62,7 @@ class AIRouter:
             "modelo": "llama-3.1-8b-instant",
             "modelo_codigo": "llama-3.3-70b-versatile",
             "modelo_reasoning": "groq/compound",
-            "modelo_intent": "llama-3.1-8b-instant",
+            "modelo_intent": "llama-3.3-70b-versatile",
             "limite_diario_tokens": 800000,
             "ativo": True,
             "prioridade": 2
@@ -73,7 +74,7 @@ class AIRouter:
             "modelo": "groq/compound",
             "modelo_codigo": "llama-3.3-70b-versatile",
             "modelo_reasoning": "groq/compound",
-            "modelo_intent": "llama-3.1-8b-instant",
+            "modelo_intent": "llama-3.3-70b-versatile",
             "limite_diario_tokens": 500000,
             "ativo": True,
             "prioridade": 3
@@ -85,7 +86,7 @@ class AIRouter:
             "modelo": "qwen/qwen3-32b",
             "modelo_codigo": "llama-3.3-70b-versatile",
             "modelo_reasoning": "qwen/qwen3-32b",
-            "modelo_intent": "llama-3.1-8b-instant",
+            "modelo_intent": "llama-3.3-70b-versatile",
             "limite_diario_tokens": 500000,
             "ativo": True,
             "prioridade": 4
@@ -124,6 +125,7 @@ class AIRouter:
         self.providers = []
         self.usage_today = {}
         self.lock = threading.Lock()
+        self.last_was_truncated = False
         self._load_config()
         self._load_usage()
 
@@ -150,8 +152,19 @@ class AIRouter:
             if not raw:
                 raw = [dict(p) for p in self._DEFAULT_PROVIDERS]
 
+            modelos_ia = cfg.get("modelos_ia", {})
+            m_chat = modelos_ia.get("chat") or cfg.get("modelo_chat")
+            m_code = modelos_ia.get("code") or cfg.get("modelo_codigo")
+            m_reasoning = modelos_ia.get("reasoning")
+            m_intent = modelos_ia.get("intent")
+
             # Injeta chaves de API via env vars (substitui qualquer plaintext legado)
             for p in raw:
+                if m_chat: p["modelo"] = m_chat
+                if m_code: p["modelo_codigo"] = m_code
+                if m_reasoning: p["modelo_reasoning"] = m_reasoning
+                if m_intent: p["modelo_intent"] = m_intent
+
                 env_key = p.get("env_key", "")
                 if env_key:
                     resolved = os.getenv(env_key, "")
@@ -168,8 +181,7 @@ class AIRouter:
 
         except Exception as e:
             self.providers = []
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as log:
-                log.write(f"AIRouter._load_config: {e}\n")
+            FileHandler.log_error(f"AIRouter._load_config: {e}")
 
     def _load_usage(self):
         try:
@@ -189,8 +201,7 @@ class AIRouter:
                 with open(self.usage_file, "w", encoding="utf-8") as f:
                     json.dump({"data": self.today, "uso": self.usage_today}, f, indent=2)
             except Exception as e:
-                with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                    f.write(f"AIRouter._save_usage falhou: {e}\n")
+                FileHandler.log_error(f"AIRouter._save_usage falhou: {e}")
 
     def _is_exhausted(self, provider: dict) -> bool:
         used = self.usage_today.get(provider["nome"], 0)
@@ -261,7 +272,17 @@ class AIRouter:
         tokens_used = data.get("usage", {}).get("total_tokens", max_tokens // 2)
         self._track_usage(provider["nome"], tokens_used)
 
-        msg_data = data["choices"][0]["message"]
+        choice = data["choices"][0]
+        finish_reason = choice.get("finish_reason")
+        if finish_reason == "length":
+            self.last_was_truncated = True
+            FileHandler.log_error(
+                f"AIRouter warning: A resposta do modelo '{modelo}' (provider: '{provider['nome']}') "
+                f"foi truncada devido ao limite de max_tokens ({max_tokens})."
+            )
+        else:
+            self.last_was_truncated = False
+        msg_data = choice["message"]
         content = msg_data.get("content") or ""
         reasoning = msg_data.get("reasoning") or ""
         return (content if content.strip() else reasoning) or ""
@@ -273,6 +294,7 @@ class AIRouter:
         temperature: float = 0.2,
         task_type: str = TaskType.CHAT,
     ) -> tuple:
+        self.last_was_truncated = False
         """Roteamento inteligente por tarefa + failover automático.
 
         Retorna (content, provider_name).
@@ -300,8 +322,7 @@ class AIRouter:
                     except:
                         pass
                 last_error = err
-                with open("erros_conhecidos.txt", "a", encoding="utf-8") as err_log:
-                    err_log.write(f"AIRouter falha no {provider['nome']} [{task_type}]: {err}\n")
+                FileHandler.log_error(f"AIRouter falha no {provider['nome']} [{task_type}]: {err}")
 
                 # Apenas marca como esgotado se for erro de cota/limite diário permanente (evita falsos positivos com TPM/RPM temporários)
                 if any(x in err.lower() for x in ["quota_exceeded", "daily_limit", "billing_limit", "insufficient_balance", "quota exceeded"]):

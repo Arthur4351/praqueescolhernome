@@ -35,7 +35,7 @@ class SophiaAgentCore:
             "GENERATE_NEW_SKILL", "EDIT_PROJECT_FILE",
             "FORMAT_EXCEL_COLUMNS", "IMPROVE_EXCEL_SENIOR",
             "PROCESSAR_FOTOS", "DATAS", "UPDATE_WHATSAPP", 
-            "CONFIGURAR_PADRAO_FOTOS", "REGISTRAR_FATO_LTM", "RUN_AGENT_SKILL"
+            "CONFIGURAR_PADRAO_FOTOS", "REGISTRAR_FATO_LTM"
         }
 
     def _load_config(self) -> dict:
@@ -43,8 +43,7 @@ class SophiaAgentCore:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as err_log:
-                err_log.write(f"AgentCore: Erro carregando {self.config_path} - {e}\n")
+            FileHandler.log_error(f"AgentCore: Erro carregando {self.config_path} - {e}")
             return {"sinonimos_atividade": ["atividade", "servico", "entrada", "saida"]}
 
     def update_context(self, **kwargs):
@@ -74,8 +73,7 @@ class SophiaAgentCore:
             report.append("\nEu pretendo processar estes itens baseada nas diretrizes atuais. Confirma?")
             return "\n".join(report)
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as err_log:
-                err_log.write(f"AgentCore: Falha Critica no Dry Run - {e}\n")
+            FileHandler.log_error(f"AgentCore: Falha Critica no Dry Run - {e}")
             return "Erro critico durante varredura. Detalhes salvos no log."
 
     def evaluate_chat(self, user_input: str, user_name: str = "Usuário") -> str:
@@ -217,23 +215,7 @@ class SophiaAgentCore:
                     resultados.append(f"Ação [GENERATE_NEW_SKILL] -> {res_dyn}")
                     continue
 
-                elif intent == "RUN_AGENT_SKILL":
-                    from core.dynamic_coder import DynamicCoder
-                    coder = DynamicCoder(self.groq_api_key)
-                    skill_name = args.get("skill", item.get("skill", ""))
-                    prompt = args.get("prompt", item.get("prompt", "Use a habilidade para resolver a tarefa."))
-                    
-                    skill_file = Path(os.path.dirname(os.path.dirname(__file__))) / ".agent" / "skills" / skill_name / "SKILL.md"
-                    skill_content = ""
-                    if skill_file.exists():
-                        try:
-                            skill_content = skill_file.read_text(encoding="utf-8")
-                        except: pass
-                    
-                    full_prompt = f"Você deve utilizar as instruções e princípios desta Habilidade Especializada:\n\n{skill_content}\n\nTarefa do usuário: {prompt}" if skill_content else prompt
-                    res_dyn = coder.generate_and_run(full_prompt, args)
-                    resultados.append(f"Ação [RUN_AGENT_SKILL ({skill_name})] -> {res_dyn}")
-                    continue
+
 
                 elif intent == "CONFIGURAR_PADRAO_FOTOS":
                     try:

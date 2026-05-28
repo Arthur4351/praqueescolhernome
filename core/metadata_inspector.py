@@ -2,6 +2,7 @@ import os
 from PIL import Image
 from PIL.ExifTags import TAGS
 import datetime
+from core.file_handler import FileHandler
 
 class MetadataInspector:
     @staticmethod
@@ -27,16 +28,18 @@ class MetadataInspector:
                         elif tag == 'Make' and info["camera"] == "Desconhecida":
                             info["camera"] = str(value).strip()
 
-            if info["data"] == "Desconhecida":
+        except Exception as e:
+            pass
+            
+        if info["data"] == "Desconhecida":
+            try:
                 # Fallback no relogio de modificacao do OS
                 timestamp = os.path.getmtime(image_path)
                 dt = datetime.datetime.fromtimestamp(timestamp)
                 info["data"] = dt.strftime('%Y/%m/%d')
                 info["hora"] = dt.strftime('%H:%M:%S')
                 info["camera"] = "Dispositivo do Sistema Operacional"
-                
-        except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"MetadataInspector: Falha EXIF em {image_path} - {e}\n")
+            except Exception as e:
+                FileHandler.log_error(f"MetadataInspector: Falha fallback OS em {image_path} - {e}")
         
         return info

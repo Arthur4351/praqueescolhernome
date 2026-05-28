@@ -19,8 +19,7 @@ class ExcelEngine:
             norm_expected = [FileHandler.normalize_string(col) for col in expected_columns]
             return any(expected in found_cols for expected in norm_expected)
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"ExcelEngine: Falha na validacao {excel_path.name} - {e}\n")
+            FileHandler.log_error(f"ExcelEngine: Falha na validacao {excel_path.name} - {e}")
             return False
 
     @staticmethod
@@ -38,8 +37,7 @@ class ExcelEngine:
                 return True
             return False
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"ExcelEngine: Erro ao injetar formula em {excel_path} - {e}\n")
+            FileHandler.log_error(f"ExcelEngine: Erro ao injetar formula em {excel_path} - {e}")
             return False
 
     @staticmethod

@@ -52,11 +52,10 @@ class SophiaExecutor:
             gc.collect()
             return img_io, selo
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as err_log:
-                err_log.write(f"Erro em preparar_foto ({caminho_foto}): {e}\n")
+            FileHandler.log_error(f"Erro em preparar_foto ({caminho_foto}): {e}")
             return None, None
 
-    def atualizar_datas_planilha(self, excel_path, pasta_fotos, log_func):
+    def atualizar_datas_planilha(self, excel_path, pasta_fotos, log_func, dynamic_filter=None):
         """Preenche sequencialmente de 1 a 30 nas colunas de data/dia, sem ler imagens."""
         try:
             from openpyxl import load_workbook
@@ -89,6 +88,19 @@ class SophiaExecutor:
                                 break
                         
                         if not linha_vazia:
+                            meta_dia = {
+                                "dia": str(dia),
+                                "nome": "",
+                                "tamanho_bytes": 0,
+                                "hora": "",
+                                "camera": "",
+                                "equipe": nome_aba.strip().upper()
+                            }
+                            if dynamic_filter and not dynamic_filter.evaluate(meta_dia):
+                                dia += 1
+                                if dia > 30: dia = 1
+                                continue
+                            
                             ws.cell(row=r, column=coluna_data).value = dia
                             dia += 1
                             if dia > 30:
@@ -158,7 +170,7 @@ class SophiaExecutor:
         except:
             ws.cell(row=t_cell[0], column=t_cell[1] + 1).value = selo['km']
 
-    def _coletar_fotos_pasta(self, pasta):
+    def _coletar_fotos_pasta(self, pasta, dynamic_filter=None):
         """Coleta metadados das fotos de uma pasta sem carregar os pixels ainda."""
         resultado = {}
         eq = pasta.name.strip().upper()
@@ -179,6 +191,26 @@ class SophiaExecutor:
             m = re.search(r'(\d+)', nm)
             if not m: continue
             dia = str(int(m.group(1)))
+            
+            # Avalia filtro dinâmico (RDE)
+            if dynamic_filter:
+                info_meta = {
+                    "dia": dia,
+                    "nome": f.name,
+                    "tamanho_bytes": f.stat().st_size,
+                    "equipe": eq
+                }
+                if "hora" in dynamic_filter.expression_str or "camera" in dynamic_filter.expression_str:
+                    info_exif = MetadataInspector.extract_full_metadata(str(f))
+                    info_meta["hora"] = info_exif.get("hora", "Desconhecida")
+                    info_meta["camera"] = info_exif.get("camera", "Desconhecida")
+                else:
+                    info_meta["hora"] = "Desconhecida"
+                    info_meta["camera"] = "Desconhecida"
+                
+                if not dynamic_filter.evaluate(info_meta):
+                    continue
+
             if dia not in resultado:
                 resultado[dia] = {}
                 
@@ -228,13 +260,16 @@ class SophiaExecutor:
             resultado[dia][t] = {'path': f, 'ocr': t in ['ENTRADA', 'SAIDA']}
         return eq, resultado
 
-    def _processar_fotos_lote(self, dias_dict, max_workers):
+    def _processar_fotos_lote(self, dias_dict, max_workers, log_func=None, nome_aba=""):
         """Carrega e redimensiona apenas as fotos de um lote (uma equipe/aba)."""
         tasks = []
         for dia, tipos in dias_dict.items():
             for tipo, meta in tipos.items():
                 if 'path' in meta:
                     tasks.append((dia, tipo, meta['path'], meta.get('ocr', False)))
+
+        total_tasks = len(tasks)
+        completed_tasks = 0
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
             future_map = {
@@ -243,6 +278,13 @@ class SophiaExecutor:
             }
             for future in concurrent.futures.as_completed(future_map):
                 dia, tipo, _, _ = future_map[future]
+                completed_tasks += 1
+                if log_func and total_tasks > 0:
+                    try:
+                        percent = int(completed_tasks / total_tasks * 100)
+                        log_func(f"⏳ Processando aba <b>{nome_aba}</b>: {completed_tasks}/{total_tasks} fotos ({percent}%)")
+                    except:
+                        pass
                 try:
                     img_io, selo = future.result()
                     if img_io:
@@ -325,7 +367,7 @@ class SophiaExecutor:
 
         return fotos_total
 
-    def processar_comando(self, pasta_raiz_fotos, excel_path, destino_path, nome_usuario, log_func):
+    def processar_comando(self, pasta_raiz_fotos, excel_path, destino_path, nome_usuario, log_func, dynamic_filter=None, excel_lock_callback=None):
         """
         Motor principal de injeção de fotos.
         Arquitetura em lotes por aba — processa e libera memória aba a aba
@@ -348,18 +390,20 @@ class SophiaExecutor:
                     indice_pastas[eq_norm] = pasta
 
             wb = None
-            for attempt in range(3):
+            while True:
                 try:
                     wb = load_workbook(excel_path, keep_vba=True)
                     break
                 except PermissionError:
-                    if attempt < 2:
-                        log_func(f"⚠️ O Excel original ('{Path(excel_path).name}') está aberto! Salve e feche-o. Vou tentar ler de novo em 10 segundos... (Tentativa {attempt+1}/3)")
+                    if excel_lock_callback:
+                        retry = excel_lock_callback(f"⚠️ O Excel original ('{Path(excel_path).name}') está aberto! Salve e feche-o.")
+                        if not retry:
+                            log_func("❌ Execução cancelada pelo usuário (Excel bloqueado).")
+                            return "Abortado: Excel bloqueado."
+                    else:
+                        log_func(f"⚠️ O Excel original ('{Path(excel_path).name}') está aberto! Salve e feche-o. Vou tentar ler de novo em 10 segundos...")
                         import time
                         time.sleep(10)
-                    else:
-                        log_func("❌ ERRO CRÍTICO: Não consegui abrir o Excel porque ele continua bloqueado. Abortando.")
-                        return "Abortado: Excel bloqueado."
             
             fotos_total_geral = 0
             dados_relatorio = {}
@@ -367,6 +411,20 @@ class SophiaExecutor:
 
             for nm_aba in wb.sheetnames:
                 aba_norm = nm_aba.strip().upper()
+
+                # Filtra a aba/equipe inteira pelo DynamicFilter se aplicável
+                if dynamic_filter:
+                    meta_equipe = {
+                        "dia": "1",  # dummy para evitar erro de avaliação
+                        "nome": "",
+                        "tamanho_bytes": 0,
+                        "hora": "",
+                        "camera": "",
+                        "equipe": aba_norm
+                    }
+                    if not dynamic_filter.evaluate(meta_equipe):
+                        log_func(f"ℹ️ Aba '{nm_aba}': ignorada pelo filtro de equipes do contexto.")
+                        continue
 
                 # Fuzzy match: encontra a pasta que corresponde a esta aba
                 pasta_alvo = indice_pastas.get(aba_norm)
@@ -384,14 +442,14 @@ class SophiaExecutor:
                 log_func(f"⏳ Processando aba <b>{nm_aba}</b>...")
 
                 # Coleta metadados (sem carregar pixels)
-                _, dias_meta = self._coletar_fotos_pasta(pasta_alvo)
+                _, dias_meta = self._coletar_fotos_pasta(pasta_alvo, dynamic_filter=dynamic_filter)
 
                 if not dias_meta:
                     log_func(f"ℹ️ Aba '{nm_aba}': pasta sem fotos reconhecíveis.")
                     continue
 
                 # Carrega pixels apenas desta aba em paralelo
-                dias_carregado = self._processar_fotos_lote(dias_meta, max_workers)
+                dias_carregado = self._processar_fotos_lote(dias_meta, max_workers, log_func, nm_aba)
 
                 # Injeta na aba
                 ws = wb[nm_aba]
@@ -433,14 +491,7 @@ class SophiaExecutor:
                         resumo, dados = gerar_relatorio_faltas(dados_relatorio)
                         log_func(resumo)
 
-                        # Salva JSON para o n8n
-                        rel_dir = Path("relatorios_n8n")
-                        rel_dir.mkdir(exist_ok=True)
-                        json_path = rel_dir / f"relatorio_faltas_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-                        with open(json_path, 'w', encoding='utf-8') as f:
-                            json.dump(dados, f, indent=4, ensure_ascii=False)
 
-                        log_func(f"💾 JSON salvo em: {json_path.absolute()}")
 
                         # Envia WhatsApp: credenciais EXCLUSIVAMENTE via .env ou config.json
                         try:

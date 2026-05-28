@@ -30,8 +30,7 @@ class FileHandler:
                         matched_files.append(file)
             return matched_files
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"FileHandler: Falha ao escanear pasta {directory_path} - {e}\n")
+            FileHandler.log_error(f"FileHandler: Falha ao escanear pasta {directory_path} - {e}")
             return []
 
     @staticmethod
@@ -46,8 +45,7 @@ class FileHandler:
                         (target / sub_clean).mkdir(parents=True, exist_ok=True)
             return True
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"FileHandler: Erro ao criar pasta {folder_name} - {e}\n")
+            FileHandler.log_error(f"FileHandler: Erro ao criar pasta {folder_name} - {e}")
             return False
 
     @staticmethod
@@ -70,8 +68,7 @@ class FileHandler:
             target.rename(new_path)
             return True
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"FileHandler: Erro ao renomear {target_path} para {new_name} - {e}\n")
+            FileHandler.log_error(f"FileHandler: Erro ao renomear {target_path} para {new_name} - {e}")
             return False
 
     @staticmethod
@@ -136,8 +133,7 @@ class FileHandler:
                         temp_sub.rename(recuperado_path)
                 except:
                     pass
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"FileHandler: Erro ao renomear avancado em {target_path} - {e}\n")
+            FileHandler.log_error(f"FileHandler: Erro ao renomear avancado em {target_path} - {e}")
             return False
 
     @staticmethod
@@ -157,8 +153,7 @@ class FileHandler:
             shutil.move(str(src), str(dst_file))
             return str(dst_file)
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"FileHandler: Erro ao mover {source_path} - {e}\n")
+            FileHandler.log_error(f"FileHandler: Erro ao mover {source_path} - {e}")
             return ""
 
     @staticmethod
@@ -170,6 +165,24 @@ class FileHandler:
                 return True
             return False
         except Exception as e:
-            with open("erros_conhecidos.txt", "a", encoding="utf-8") as f:
-                f.write(f"FileHandler: Erro ao deletar pasta {target_path} - {e}\n")
+            FileHandler.log_error(f"FileHandler: Erro ao deletar pasta {target_path} - {e}")
             return False
+
+    @staticmethod
+    def log_error(message: str):
+        log_file = Path("erros_conhecidos.txt")
+        try:
+            # Rotação se passar de 5MB
+            if log_file.exists() and log_file.stat().st_size > 5 * 1024 * 1024:
+                old_file = log_file.with_name("erros_conhecidos.old.txt")
+                if old_file.exists():
+                    old_file.unlink()
+                log_file.rename(old_file)
+        except:
+            pass
+        
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(message + "\n")
+        except:
+            pass

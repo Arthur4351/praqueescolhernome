@@ -1,8 +1,52 @@
-from PIL import ImageQt
-from PIL import ImageQt
-from PIL import ImageQt
 import sys
 import os
+
+# =========================================================================
+# INTERCEPTADOR DE LINHA DE COMANDO (EMULADOR PYTHON / SANDBOX CORPORATIVO)
+# =========================================================================
+if len(sys.argv) > 1:
+    # Caso 1: Compilação de código estática (-m py_compile arquivo.py)
+    if len(sys.argv) > 3 and sys.argv[1] == "-m" and sys.argv[2] == "py_compile":
+        _target_file = sys.argv[3]
+        try:
+            if os.path.exists(_target_file):
+                with open(_target_file, "r", encoding="utf-8") as _f:
+                    compile(_f.read(), _target_file, "exec")
+                sys.exit(0)
+            else:
+                sys.stderr.write(f"Arquivo nao encontrado: {_target_file}\n")
+                sys.exit(1)
+        except Exception as _compile_err:
+            sys.stderr.write(f"Erro de compilacao: {str(_compile_err)}\n")
+            sys.exit(1)
+            
+    # Caso 2: Execução de script dinâmico gerado (arquivo.py)
+    elif sys.argv[1].endswith(".py") and os.path.exists(sys.argv[1]):
+        _script_path = sys.argv[1]
+        try:
+            with open(_script_path, "r", encoding="utf-8") as _f:
+                _code_content = _f.read()
+            # Ajusta os argumentos de sys.argv para o script filho
+            sys.argv = [_script_path] + sys.argv[2:]
+            # Adiciona o diretório do script ao path
+            _script_dir = os.path.dirname(os.path.abspath(_script_path))
+            if _script_dir not in sys.path:
+                sys.path.insert(0, _script_dir)
+            # Define o contexto global para execução
+            _global_context = {
+                "__file__": _script_path,
+                "__name__": "__main__",
+                "__package__": None,
+            }
+            import builtins
+            _global_context.update(builtins.__dict__)
+            exec(_code_content, _global_context)
+            sys.exit(0)
+        except Exception as _exec_err:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
 import json
 import ctypes
 import getpass
@@ -180,6 +224,27 @@ class SophiaApp(QMainWindow):
         texto_html = str(texto).replace('\n', '<br>')
         texto_html = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', texto_html)
         self.chat_display.append(f"<b>SOPHIA:</b> {texto_html}")
+
+    def handle_excel_lock(self, message: str) -> bool:
+        """Callback executado pela thread do worker para exibir caixa de diálogo de bloqueio do Excel de forma thread-safe."""
+        import threading
+        result = [False]
+        event = threading.Event()
+        QTimer.singleShot(0, lambda: self._show_locked_excel_dialog(message, event, result))
+        event.wait()
+        return result[0]
+
+    def _show_locked_excel_dialog(self, message: str, event, result_list: list):
+        """Abre a caixa de diálogo modal na thread principal e sinaliza a liberação da thread do worker."""
+        box = QMessageBox(self)
+        box.setWindowTitle("Excel Bloqueado")
+        box.setText(message)
+        box.setIcon(QMessageBox.Warning)
+        btn_retry = box.addButton("Tentar Novamente", QMessageBox.AcceptRole)
+        btn_cancel = box.addButton("Cancelar", QMessageBox.RejectRole)
+        box.exec()
+        result_list[0] = (box.clickedButton() == btn_retry)
+        event.set()
 
     @Slot(str)
     def _on_eval_complete(self, res: str):
@@ -598,7 +663,7 @@ class SophiaApp(QMainWindow):
             self.input_field.clear()
             return
 
-        if "scan" in txt:
+        if txt == "scan":
 
             self.log_callback("🕵️ Iniciando Scan de integridade local...")
             if not self.ai:
@@ -620,7 +685,7 @@ class SophiaApp(QMainWindow):
                 worker.signals.error_signal.connect(self.log_callback)
                 QThreadPool.globalInstance().start(worker)
 
-        elif "processar" in txt:
+        elif txt in ["processar", "fotos", "processar fotos", "processar lote", "iniciar processamento"]:
             if not self.executor:
                 self.log_callback("Erro: Módulo de habilidades offline.")
             else:
@@ -643,7 +708,12 @@ class SophiaApp(QMainWindow):
                 self.dados_pendentes = {"fotos": f, "excel": e, "destino": d}
                 self.log_callback("🚀 SOPHIA: Tudo pronto! Iniciando processamento automático...")
                 
-                worker = Worker(self.executor.processar_comando, f, e, d, "Automático", lambda msg: worker.signals.log_signal.emit(msg))
+                worker = Worker(
+                    self.executor.processar_comando,
+                    f, e, d, "Automático",
+                    lambda msg: worker.signals.log_signal.emit(msg),
+                    excel_lock_callback=self.handle_excel_lock
+                )
                 worker.signals.log_signal.connect(self.log_callback)
                 worker.signals.error_signal.connect(self.log_callback)
                 
@@ -656,7 +726,7 @@ class SophiaApp(QMainWindow):
                 worker.signals.finished_signal.connect(on_processamento_finished)
                 QThreadPool.globalInstance().start(worker)
 
-        elif "datas" in txt:
+        elif txt in ["datas", "corrigir datas", "sincronizar datas", "ajustar datas"]:
             if not self.executor:
                 self.log_callback("Erro: Módulo de habilidades offline.")
             else:
@@ -665,7 +735,7 @@ class SophiaApp(QMainWindow):
                 if not e:
                     self.log_callback("⚠️ Ação cancelada: Você não selecionou a **Planilha**.")
                     return
-
+ 
                 f = QFileDialog.getExistingDirectory(self, "Pasta de Fotos")
                 if not f:
                     self.log_callback("⚠️ Ação cancelada: Você não selecionou a **Pasta de Fotos**.")
@@ -704,6 +774,11 @@ class SophiaApp(QMainWindow):
     def _execute_final_visual_step(self, intent: str):
         self.log_callback("Ótimo. Para garantir a segurança, aponte a pasta alvo na janela do Windows que acabei de abrir.")
         try:
+            # Instancia o DynamicFilter se houver filter_expression
+            filter_expr = self.ai.args.get("filter_expression") if self.ai else None
+            from core.dynamic_filter import DynamicFilter
+            dynamic_filter = DynamicFilter(filter_expr) if filter_expr else None
+
             if intent == "CREATE_FOLDER":
                 d = QFileDialog.getExistingDirectory(self, "SOPHIA: Selecionar Pasta Base para Criação")
                 if not d: raise Exception("Operação cancelada pelo usuário.")
@@ -753,7 +828,9 @@ class SophiaApp(QMainWindow):
                     self.ai.args["excel"],
                     self.ai.args["destino"],
                     self.ai.args.get("alvo") or "Automático",
-                    lambda msg: worker.signals.log_signal.emit(msg)
+                    lambda msg: worker.signals.log_signal.emit(msg),
+                    dynamic_filter,
+                    excel_lock_callback=self.handle_excel_lock
                 )
                 def on_processamento_finished(res):
                     self.log_callback(res)
@@ -768,28 +845,7 @@ class SophiaApp(QMainWindow):
                 QThreadPool.globalInstance().start(worker)
                 return
                     
-            elif intent == "GERAR_RELATORIO":
-                if "pasta" not in self.ai.args:
-                    p = QFileDialog.getExistingDirectory(self, "SOPHIA: Selecionar Pasta de Fotos para Relatório")
-                    if not p: raise Exception("Pasta não selecionada.")
-                    self.ai.args["pasta"] = p
-                
-                from core.relatorio_engine import gerar_relatorio_faltas
-                from pathlib import Path
-                import json
-                import datetime
-                
-                resumo, dados = gerar_relatorio_faltas(self.ai.args["pasta"])
-                self.log_callback(resumo)
-                
-                rel_dir = Path("relatorios_n8n")
-                rel_dir.mkdir(exist_ok=True)
-                json_path = rel_dir / f"relatorio_faltas_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-                with open(json_path, 'w', encoding='utf-8') as f:
-                    json.dump(dados, f, indent=4, ensure_ascii=False)
-                    
-                self.log_callback(f"💾 JSON salvo em: {json_path.absolute()}")
-                return
+
                 
             elif intent == "DATAS":
                 if "excel" not in self.ai.args:
@@ -803,7 +859,7 @@ class SophiaApp(QMainWindow):
                     self.ai.args["fotos"] = f
                 
                 self.log_callback("📅 SOPHIA: Sincronizando datas...")
-                worker = Worker(self.executor.atualizar_datas_planilha, self.ai.args["excel"], self.ai.args["fotos"], self.log_callback)
+                worker = Worker(self.executor.atualizar_datas_planilha, self.ai.args["excel"], self.ai.args["fotos"], self.log_callback, dynamic_filter)
                 worker.signals.error_signal.connect(self.log_callback)
                 QThreadPool.globalInstance().start(worker)
                 return
