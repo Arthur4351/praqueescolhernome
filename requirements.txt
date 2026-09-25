@@ -1,0 +1,24 @@
+# Dependencias reais da SOPHIA AI (fixadas nas versoes testadas).
+
+# Interface grafica
+PySide6==6.11.2
+
+# Planilhas Excel (.xlsx/.xlsm) e analise de dados
+openpyxl==3.1.5
+pandas==2.3.3
+numpy==2.5.2
+
+# Imagens e OCR (o binario do tesseract vai em bin/)
+# Pillow 12.2.0: corrige CVE-2026-42309/42310 (buffer overflow / DoS via PDF)
+# e CVE-2026-25990. Nao usar 10.4.0 (varias CVEs conhecidas).
+Pillow==12.2.0
+pytesseract==0.3.13
+
+# HTTP e variaveis de ambiente (.env)
+requests==2.34.2
+python-dotenv==1.2.3
+
+# --- Opcional (recurso ainda nao ligado por padrao) ---
+# Necessario apenas para core/forms_submitter.py (preencher MS Forms -> PDF).
+# Depois de instalar, rode tambem: playwright install chromium
+# playwright==1.55.0

@@ -1,0 +1,48 @@
+[SETUP] Planilha criada: relatorio_fotografico.xlsx (abas: EQUIPE 01, EQUIPE 02)
+[SETUP] Fotos geradas: 8 arquivos em 2 pastas
+[INFO] SophiaExecutor instanciado. OCR disponivel? False
+
+===== TESTE 1: SALVAR FOTOS NA PLANILHA (processar_comando) =====
+⏳ Processando aba <b>EQUIPE 01</b>...
+⏳ Processando aba <b>EQUIPE 01</b>: 1/4 fotos (25%)
+⏳ Processando aba <b>EQUIPE 01</b>: 2/4 fotos (50%)
+⏳ Processando aba <b>EQUIPE 01</b>: 3/4 fotos (75%)
+⏳ Processando aba <b>EQUIPE 01</b>: 4/4 fotos (100%)
+✅ Aba <b>EQUIPE 01</b>: 4 foto(s) injetada(s).
+⏳ Processando aba <b>EQUIPE 02</b>...
+⏳ Processando aba <b>EQUIPE 02</b>: 1/4 fotos (25%)
+⏳ Processando aba <b>EQUIPE 02</b>: 2/4 fotos (50%)
+⏳ Processando aba <b>EQUIPE 02</b>: 3/4 fotos (75%)
+⏳ Processando aba <b>EQUIPE 02</b>: 4/4 fotos (100%)
+✅ Aba <b>EQUIPE 02</b>: 4 foto(s) injetada(s).
+🎉 <b>CONCLUÍDO!</b> 8 fotos injetadas → <b>Relatorio_7480.xlsm</b>
+📊 <b>SOPHIA:</b> Gerando relatório de faltas automático...
+📊 *Relatório de Auditoria Sophia* - 24/09/2026
+━━━━━━━━━━━━━━━━━━━━━━
+
+✨ *EXCELENTE!* ✨
+Nenhuma foto está faltando nas planilhas hoje.
+✅ 2 equipe(s) com documentação 100% em dia.
+
+🌐 <b>SOPHIA:</b> Enviando relatório direto para o seu WhatsApp via CallMeBot...
+⚠️ WhatsApp não configurado. Adicione WHATSAPP_TELEFONE e WHATSAPP_APIKEY no .env
+[RETORNO] 📊 *Relatório de Auditoria Sophia* - 24/09/2026
+━━━━━━━━━━━━━━━━━━━━━━
+
+✨ *EXCELENTE!* ✨
+Nenhuma foto está faltando nas planilhas hoje.
+✅ 2 equipe(s) com documentação 100% em dia.
+
+[VERIFICA] Arquivos gerados na pasta de saida: ['Relatorio_7480.xlsm', 'Relatorio_99a2.xlsm', 'Relatorio_b7a2.xlsm', 'Relatorio_bffb.xlsm']
+[VERIFICA] Relatorio_7480.xlsm: 8 imagem(ns) embutida(s) em 2 aba(s)
+[VERIFICA] Relatorio_99a2.xlsm: 8 imagem(ns) embutida(s) em 2 aba(s)
+[VERIFICA] Relatorio_b7a2.xlsm: 8 imagem(ns) embutida(s) em 2 aba(s)
+[VERIFICA] Relatorio_bffb.xlsm: 8 imagem(ns) embutida(s) em 2 aba(s)
+
+===== TESTE 2: EFETIVO / AUDITORIA DE PRESENCA (auditar_efetivo) =====
+[SETUP] Pastas efetivo: JOAO/MARIA/CARLOS | Excel: JOAO/MARIA/ANA (ANA so no Excel, CARLOS so na pasta)
+<br><b>=== RESULTADO DA AUDITORIA ===</b><br>
+⚠️ <b>Na Pasta, mas NÃO no Excel:</b><br>Carlos Pereira<br>
+❌ <b>No Excel, mas NÃO mandou a pasta:</b><br>Ana Lima<br>
+
+===== FIM DO TESTE FUNCIONAL =====
