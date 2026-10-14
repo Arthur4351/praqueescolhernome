@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head><meta charset="utf-8"><title>Formulário de Teste (mock MS Forms)</title></head>
+<body style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:24px auto">
+  <h2>Relatório de Serviço</h2>
+
+  <p>
+    <label for="nome">Nome completo</label><br>
+    <input id="nome" type="text" style="width:100%">
+  </p>
+
+  <p>
+    <label for="data">Data do serviço</label><br>
+    <input id="data" type="text" placeholder="dd/mm/aaaa">
+  </p>
+
+  <fieldset>
+    <legend>Turno</legend>
+    <input id="t_d" type="radio" name="turno"><label for="t_d">Diurno</label>
+    <input id="t_n" type="radio" name="turno"><label for="t_n">Noturno</label>
+  </fieldset>
+
+  <p>
+    <label for="escopo">Escopo</label><br>
+    <select id="escopo">
+      <option value="">Selecione</option>
+      <option>Instalação</option>
+      <option>Manutenção</option>
+      <option>Inspeção</option>
+    </select>
+  </p>
+
+  <fieldset>
+    <legend>Itens verificados</legend>
+    <input id="c_p" type="checkbox"><label for="c_p">Pneus</label><br>
+    <input id="c_f" type="checkbox"><label for="c_f">Freios</label><br>
+    <input id="c_l" type="checkbox"><label for="c_l">Luzes</label><br>
+    <input id="c_e" type="checkbox"><label for="c_e">Escapamento</label>
+  </fieldset>
+
+  <button type="button">Enviar</button>
+</body>
+</html>

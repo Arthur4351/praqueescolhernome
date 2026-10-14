@@ -7,9 +7,11 @@ from pathlib import Path
 from core.file_handler import FileHandler
 
 # Carrega .env automaticamente se disponível
+# (ao lado do .exe quando congelado; raiz do projeto em dev)
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent.parent / ".env")
+    from core.paths import runtime_path
+    load_dotenv(runtime_path(".env"))
 except ImportError:
     pass
 
@@ -142,7 +144,7 @@ class AIRouter:
 
     def __init__(self, config_path: str = "config.json"):
         self.config_path = config_path
-        self.usage_file = "ai_usage.json"
+        self.usage_file = runtime_path("ai_usage.json")
         self.today = str(date.today())
         self.providers = []
         self.usage_today = {}

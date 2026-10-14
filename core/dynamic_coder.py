@@ -11,11 +11,12 @@ class DynamicCoder:
     """Motor de Self-Coding para geração e execução de scripts dinâmicos."""
 
     def __init__(self, api_key: str):
+        from core.paths import runtime_path
         self.api_key = api_key
-        self.skills_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "dynamic_skills"
+        self.skills_dir = Path(runtime_path("dynamic_skills"))
         self.skills_dir.mkdir(parents=True, exist_ok=True)
         self.modelo_codigo = "llama-3.3-70b-versatile"
-        config_path = Path(os.path.dirname(os.path.dirname(__file__))) / "config.json"
+        config_path = Path(runtime_path("config.json"))
         if config_path.exists():
             try:
                 import json as _json

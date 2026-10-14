@@ -5,8 +5,21 @@ from core.file_handler import FileHandler
 if getattr(sys, 'frozen', False): _BASE_DIR = sys._MEIPASS
 else: _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# No .exe, o tesseract pode ir AO LADO do executavel (pasta bin/) ou
+# instalado no sistema — ambos funcionam sem precisar reempacotar.
+def _exe_side_tesseract():
+    try:
+        from core.paths import app_dir
+        return os.path.join(app_dir(), 'bin', 'tesseract', 'tesseract.exe')
+    except Exception:
+        return None
+
 _TESSERACT_PATH = os.path.join(_BASE_DIR, 'bin', 'tesseract', 'tesseract.exe')
-_FALLBACK_PATHS = [r'C:\Program Files\Tesseract-OCR\tesseract.exe', r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe']
+_FALLBACK_PATHS = [p for p in [
+    _exe_side_tesseract(),
+    r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+    r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+] if p]
 
 class OCREngine:
     _initialized, _available = False, False

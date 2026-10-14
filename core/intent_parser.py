@@ -13,9 +13,11 @@ from pathlib import Path
 from core.file_handler import FileHandler
 
 # Carrega variáveis de ambiente do .env uma única vez
+# (ao lado do .exe quando congelado; raiz do projeto em dev)
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent.parent / ".env")
+    from core.paths import runtime_path
+    load_dotenv(runtime_path(".env"))
 except ImportError:
     pass
 
@@ -28,7 +30,7 @@ class IntentParser:
         self._conversational_bow = None
         self.threshold = 0.25
         self.lock = threading.Lock()
-        self.brain_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'brain.json')
+        self.brain_file = runtime_path('brain.json')
         self.contexto_ativo = {
             "ultimo_arquivo": None,
             "ultimo_diretorio": None,
@@ -44,7 +46,7 @@ class IntentParser:
 
         # Modelo de chat: lê do config.json (sem chaves, só preferências)
         self.modelo_chat = "compound-beta"
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+        config_path = runtime_path('config.json')
         if os.path.exists(config_path):
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
@@ -76,7 +78,10 @@ class IntentParser:
         text = text.lower()
         text = ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
         words = re.findall(r'\b\w+\b', text)
-        return set(words)
+        # Tokens de 1 caractere (artigos/conjuncoes "a/o/e", digitos soltos) nao carregam
+        # sinal de intencao e so diluem a densidade do Bag-of-Words (o denominador cresce e
+        # empurra frases legitimas para baixo do threshold). Descartados.
+        return {w for w in words if len(w) > 1}
 
     def _load_intents(self):
         """Carrega os vetores de palavras do brain.json (Aprendizado Autônomo)."""
@@ -101,9 +106,14 @@ class IntentParser:
                     "FORMAT_EXCEL_COLUMNS": {"altere", "colunas", "largura", "tamanho", "ajustar", "coluna", "planilha", "excel"},
                     "IMPROVE_EXCEL_SENIOR": {"melhore", "nivel", "senior", "bonita", "design", "formatar", "premium", "visual", "excel", "planilha"},
                     "PROCESSAR_FOTOS": {"processar", "processar_fotos", "lote", "salvar", "fotos", "foto", "injetar", "planilha", "inserir", "salva"},
-                    "CONFIGURAR_PADRAO_FOTOS": {"ensinar", "configurar", "aprender", "padrao", "padroes", "regras", "regra", "definir"}
+                    "CONFIGURAR_PADRAO_FOTOS": {"ensinar", "configurar", "aprender", "padrao", "padroes", "regras", "regra", "definir"},
+                    "PREENCHER_FORMS": {"forms", "formulario", "formulário", "preencher", "preenche", "marcar", "marque", "responder", "responda", "questionario", "questionário"}
                 }
                 self._save_brain()
+
+        # Garante que intents novos existam mesmo em brain.json antigos (sem re-salvar)
+        if self._intents_bow is not None and "PREENCHER_FORMS" not in self._intents_bow:
+            self._intents_bow["PREENCHER_FORMS"] = {"forms", "formulario", "formulário", "preencher", "preenche", "marcar", "marque", "responder", "responda", "questionario", "questionário"}
         
         if self._conversational_bow is None:
             self._conversational_bow = {
@@ -145,7 +155,7 @@ class IntentParser:
         return matches / len(user_tokens)
 
     def _load_memory(self):
-        memory_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'long_term_memory.json')
+        memory_file = runtime_path('long_term_memory.json')
         try:
             import json
             with open(memory_file, 'r', encoding='utf-8') as f:
@@ -155,7 +165,7 @@ class IntentParser:
             return "Nenhuma."
 
     def _save_memory(self, fato):
-        memory_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'long_term_memory.json')
+        memory_file = runtime_path('long_term_memory.json')
         with self.lock:
             try:
                 memories = []
@@ -178,8 +188,9 @@ class IntentParser:
 
     def _load_relevant_skills(self, user_input: str) -> str:
         """Lê dinamicamente as notas de habilidades correspondentes ao input, priorizando local e com fallback para o Obsidian."""
-        # Tenta primeiro a pasta 'skills' no diretório do projeto (para rodar compilado no .exe)
-        skills_dir = Path(__file__).parent.parent / "skills"
+        # Tenta primeiro a pasta 'skills' EMPACOTADA (para rodar compilado no .exe)
+        from core.paths import resource_path
+        skills_dir = Path(resource_path("skills"))
         if not skills_dir.exists():
             # Fallback dinâmico para o Obsidian Vault local
             skills_dir = Path.home() / "OneDrive" / "Documents" / "Obsidian Vault" / "_agent" / "skills"
@@ -244,7 +255,7 @@ class IntentParser:
         if not hasattr(self, '_router') or self._router is None:
             try:
                 from core.ai_router import AIRouter
-                config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+                config_path = runtime_path('config.json')
                 self._router = AIRouter(config_path)
             except Exception as e:
                 FileHandler.log_error(f"IntentParser: Falha ao criar AIRouter: {e}")
@@ -271,7 +282,7 @@ class IntentParser:
             "  * 'mova fotos da camera iPhone' -> [ACTION: MOVE_FOLDER | FILTER_EXPRESSION='iphone' in camera.lower()]\n\n"
             "Tarefas válidas: PROCESSAR_FOTOS, DATAS, QUERY_EXCEL, "
             "QUERY_COUNT_EMPTY, AUDITAR_EFETIVO, CREATE_FOLDER, RENAME_FOLDER, DELETE_FOLDER, MOVE_FOLDER, "
-            "INJECT_FORMULA, REGISTRAR_FATO_LTM, UPDATE_WHATSAPP, CONFIGURAR_PADRAO_FOTOS.\n"
+            "INJECT_FORMULA, REGISTRAR_FATO_LTM, UPDATE_WHATSAPP, CONFIGURAR_PADRAO_FOTOS, PREENCHER_FORMS.\n"
             "Regra: você cria PASTAS (CREATE_FOLDER), renomeia/move pastas, injeta fórmulas nativas no Excel (INJECT_FORMULA), consulta planilhas (QUERY_EXCEL/QUERY_COUNT_EMPTY), processa fotos (PROCESSAR_FOTOS) e corrige datas (DATAS). Você NÃO gera scripts, macros/VBA nem cria arquivos do zero — se pedirem, avise com estilo que essa parte está desativada. Para 'crie a pasta X' use CREATE_FOLDER normalmente.\n"
             "Params por tarefa:\n"
             "- QUERY_EXCEL: Extraia ALVO=texto|COLUNA_DESEJADA=coluna. Ex: [ACTION: QUERY_EXCEL | ALVO=Arthur | COLUNA_DESEJADA=equipe]\n"
@@ -280,6 +291,7 @@ class IntentParser:
             "- CONFIGURAR_PADRAO_FOTOS: REGRAS={\"palavra\":\"coluna\"}. Use EXCLUSIVAMENTE para quando o usuário ensinar novas regras de fotos (ex: '4 é entrada', '1-quasepronta(antes)'), gravando novos padrões. NUNCA acione esta tarefa para solicitações de execução/processamento de fotos!\n"
             "- REGISTRAR_FATO_LTM: FATO=Fato important. Use APENAS se o usuário pedir 'grave' ou 'anote'. NUNCA use para 'oi', 'tudo bem' ou regras de fotos.\n"
             "- UPDATE_WHATSAPP: TELEFONE=n|APIKEY=n\n"
+            "- PREENCHER_FORMS: Use quando o usuário pedir para PREENCHER/MARCAR/RESPONDER um FORMULÁRIO (Forms) a partir de uma planilha de referência e gerar um PDF (ex: 'preencha o forms com a planilha', 'responda o formulário e tire o pdf'). Params: FORM_URL=link (opcional se estiver na planilha).\n"
             "Regra de Ouro:\n"
             "1. Si o usuário estiver dando/ensinando uma NOVA regra de foto (ex: 'X é Y', 'aprenda que X é Y'), use CONFIGURAR_PADRAO_FOTOS com as REGRAS associadas.\n"
             "2. Si o usuário pedir para PROCESSAR, SALVAR ou INJETAR FOTOS ou IMAGENS (ex: 'salve fotos', 'processar fotos', 'salva foto com o padrão do sistema'), ele quer que você EXECUTE o processamento das imagens, então use PROCESSAR_FOTOS.\n"

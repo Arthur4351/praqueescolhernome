@@ -9,9 +9,11 @@ import pandas as pd
 from core.file_handler import FileHandler
 
 # Carrega .env para ter whatsapp_telefone e apikey sem hardcode
+# (ao lado do .exe quando congelado; raiz do projeto em dev)
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent / ".env")
+    from core.paths import runtime_path
+    load_dotenv(runtime_path(".env"))
 except ImportError:
     pass
 
@@ -177,7 +179,7 @@ class SophiaExecutor:
         eq = pasta.name.strip().upper()
         
         # Carrega padrões ensinados dinamicamente (NLP)
-        config_path = Path(__file__).parent / "config.json"
+        config_path = Path(runtime_path("config.json"))
         padroes = {}
         if config_path.exists():
             try:
@@ -187,7 +189,11 @@ class SophiaExecutor:
                     padroes = cfg.get("padroes_fotos", {})
             except: pass
 
-        for f in list(pasta.rglob("*.[jJ][pP]*[gG]")) + list(pasta.rglob("*.[pP][nN][gG]")):
+        # glob (NAO-recursivo) de proposito: pega SOMENTE as fotos que estao
+        # diretamente nesta pasta de equipe. Subpastas (ex.: "mes anterior") sao
+        # ignoradas. Antes usava rglob (recursivo), que descia nas subpastas e
+        # salvava fotos antigas que NAO deviam entrar no relatorio.
+        for f in list(pasta.glob("*.[jJ][pP]*[gG]")) + list(pasta.glob("*.[pP][nN][gG]")):
             nm = f.stem.upper()
             m = re.search(r'(\d+)', nm)
             if not m: continue
@@ -604,7 +610,7 @@ class SophiaExecutor:
                             telefone = os.getenv("WHATSAPP_TELEFONE", "")
                             apikey = os.getenv("WHATSAPP_APIKEY", "")
 
-                            config_path = Path(__file__).parent / "config.json"
+                            config_path = Path(runtime_path("config.json"))
                             if config_path.exists():
                                 try:
                                     with open(config_path, "r", encoding="utf-8") as fc:
@@ -721,3 +727,9 @@ class SophiaExecutor:
         except Exception as e:
             gc.collect()
             log_func(f"❌ Erro na auditoria: {e}")
+
+    def replicar_formatacao_colunas(self, origem, aba, destino, log_func):
+        """Replica a formatação de colunas de uma planilha para outra (Stub)."""
+        if log_func:
+            log_func(f"⚠️ Replicar formatação de '{origem}' para '{destino}' em desenvolvimento.")
+        return "Função de replicar formatação em desenvolvimento."

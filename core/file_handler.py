@@ -229,7 +229,8 @@ class FileHandler:
 
     @staticmethod
     def log_error(message: str):
-        log_file = Path("erros_conhecidos.txt")
+        from core.paths import runtime_path
+        log_file = Path(runtime_path("erros_conhecidos.txt"))
         try:
             # Rotação se passar de 5MB
             if log_file.exists() and log_file.stat().st_size > 5 * 1024 * 1024:

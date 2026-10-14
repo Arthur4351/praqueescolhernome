@@ -144,9 +144,11 @@ class SophiaApp(QMainWindow):
         self.resize(1000, 800)
 
         # Carrega configuração para modo autônomo
+        # (ao lado do .exe quando congelado; raiz do projeto em dev)
         autonomia = False
         try:
-            config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+            from core.paths import runtime_path
+            config_path = runtime_path("config.json")
             if os.path.exists(config_path):
                 with open(config_path, "r", encoding="utf-8") as fc:
                     cfg = json.load(fc)
@@ -294,7 +296,8 @@ class SophiaApp(QMainWindow):
             telefone = self.ai.args.get("telefone")
             apikey = self.ai.args.get("apikey")
             if telefone and apikey:
-                config_path = Path(__file__).parent / "config.json"
+                from core.paths import runtime_path
+                config_path = Path(runtime_path("config.json"))
                 try:
                     import json
                     if config_path.exists():
@@ -839,6 +842,69 @@ class SophiaApp(QMainWindow):
                 worker.signals.log_signal.connect(self.log_callback)
                 worker.signals.error_signal.connect(self.log_callback)
                 QThreadPool.globalInstance().start(worker)
+                return
+
+            elif intent == "PREENCHER_FORMS":
+                from core.forms_submitter import FormsSubmitter
+                ok_fs, motivo_fs = FormsSubmitter.is_available()
+                if not ok_fs:
+                    self.log_callback(f"🔒 <b>SOPHIA:</b> {motivo_fs}")
+                    self.ai.pending_intents = []
+                    self.estado_atual = AppStatus.LIVRE
+                    return
+                ref = self.ai.args.get("reference_path") or self.ai.args.get("excel_path")
+                if not ref:
+                    e_files = QFileDialog.getOpenFileName(self, "SOPHIA: Planilha de Referência do Forms", "", "Excel (*.xlsx *.xlsm)")
+                    ref = e_files[0] if e_files and e_files[0] else ""
+                    if not ref: raise Exception("Planilha de referência não selecionada.")
+                self.ai.args["reference_path"] = ref
+                form_url = self.ai.args.get("form_url") or self.ai.args.get("url")
+                if not form_url:
+                    try:
+                        form_url = FormsSubmitter.parse_reference_sheet(ref).get("url")
+                    except Exception:
+                        form_url = None
+                if not form_url:
+                    text, ok = QInputDialog.getText(self, 'SOPHIA', 'Cole o link do formulário (Forms):')
+                    if not ok or not text: raise Exception("Link do formulário não informado.")
+                    form_url = text.strip()
+                self.ai.args["form_url"] = form_url
+
+                # Pergunta a DATA do serviço: 1 dia, intervalo (8 a 20) ou lista (7 e 8)
+                datas = None
+                dtxt, okd = QInputDialog.getText(
+                    self, 'SOPHIA',
+                    'Qual a data do serviço?\n'
+                    'Ex.:  8   (um dia)   |   8 a 20   (intervalo)   |   7 e 8   (só esses)\n'
+                    'Mês/ano opcionais:  8 de novembro   |   8 a 20/11   |   8/11/2027')
+                if okd and dtxt and dtxt.strip():
+                    datas = FormsSubmitter.parse_datas(dtxt.strip())
+                    if not datas:
+                        self.log_callback("⚠️ <b>SOPHIA:</b> Não entendi a data; vou preencher sem data.")
+                    else:
+                        self.log_callback(
+                            f"📅 <b>SOPHIA:</b> {len(datas)} dia(s): "
+                            + ", ".join(d.strftime('%d/%m') for d in datas))
+
+                self.log_callback("📝 SOPHIA: Abrindo o Edge e preenchendo o formulário...")
+                fs = FormsSubmitter(output_dir="relatorios")
+                ref_f, url_f, datas_f = ref, form_url, datas
+                def run_forms():
+                    r = fs.fill_all_from_spreadsheet(ref_f, url=url_f, submit=True, datas=datas_f,
+                                                     log=lambda m: worker.signals.log_signal.emit(m))
+                    pdfs = r.get("pdfs") or []
+                    if len(pdfs) == 1:
+                        return r["msg"] + f" → {pdfs[0]}"
+                    if pdfs:
+                        return r["msg"] + f" → {len(pdfs)} PDFs em 'relatorios'"
+                    return r["msg"]
+                worker = Worker(run_forms)
+                worker.signals.log_signal.connect(self.log_callback)
+                worker.signals.finished_signal.connect(self.log_callback)
+                worker.signals.error_signal.connect(self.log_callback)
+                QThreadPool.globalInstance().start(worker)
+                self.ai.pending_intents = []
+                self.estado_atual = AppStatus.LIVRE
                 return
 
             elif intent == "REPLICAR_COLUNAS":

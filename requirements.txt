@@ -18,7 +18,11 @@ pytesseract==0.3.13
 requests==2.34.2
 python-dotenv==1.2.3
 
-# --- Opcional (recurso ainda nao ligado por padrao) ---
-# Necessario apenas para core/forms_submitter.py (preencher MS Forms -> PDF).
-# Depois de instalar, rode tambem: playwright install chromium
-# playwright==1.55.0
+# --- Preenchimento de formularios web (Forms) -> PDF ---
+# core/forms_submitter.py dirige o Microsoft EDGE JA INSTALADO no Windows
+# (channel="msedge"): NAO baixa Chromium e NAO exige instalar navegador no PC
+# corporativo. NAO rode "playwright install" — o Edge do Windows e suficiente.
+# O driver do Playwright e embutido no .exe em tempo de build (ver SOPHIA.spec).
+# Se ausente, o recurso degrada com mensagem honesta (nao quebra o app).
+playwright==1.63.0
+

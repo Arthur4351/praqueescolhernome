@@ -681,5 +681,196 @@ class SophiaIntegrationTestSuite(unittest.TestCase):
         self.assertNotIn("Joao Silva", saida)
         self.assertNotIn("Maria Souza", saida)
 
+    def test_55_forms_offline_routing(self):
+        # Regressao: o roteamento OFFLINE (Bag-of-Words, sem nuvem) precisa levar as
+        # frases canonicas de Forms para PREENCHER_FORMS. Antes do fix do tokenizer,
+        # tokens de 1 char ("o/a/e") diluiam a densidade e a frase mais natural
+        # ("preenche o formulario com a planilha e tira o pdf") caia em UNKNOWN.
+        ip = IntentParser()
+        for frase in [
+            "preenche o formulario com a planilha e tira o pdf",
+            "preencha o forms com a planilha",
+            "responda o formulario e tire o pdf",
+            "marca o questionario pra mim",
+        ]:
+            self.assertEqual(
+                ip.parse_single_intent(frase)["intent"], "PREENCHER_FORMS",
+                msg=f"'{frase}' deveria rotear para PREENCHER_FORMS offline")
+        # Guarda-corpo: frases de OUTRAS acoes nao podem ser sequestradas por Forms.
+        self.assertEqual(ip.parse_single_intent("crie uma pasta")["intent"], "CREATE_FOLDER")
+        self.assertEqual(
+            ip.parse_single_intent("gera o relatorio de fotos na planilha")["intent"],
+            "PROCESSAR_FOTOS")
+
+    def test_56_forms_reference_sheet_parse(self):
+        # A planilha de referencia (A=PERGUNTA, B=TIPO, C=VALOR) deve virar campos
+        # estruturados; linha especial URL/LINK/FORMULARIO define a url do Forms.
+        # 100% openpyxl puro — nao abre navegador, roda em qualquer ambiente.
+        from core.forms_submitter import FormsSubmitter
+        import openpyxl
+
+        xlsx = os.path.join(self.temp_dir, "ref_forms.xlsx")
+        wb = openpyxl.Workbook(); ws = wb.active
+        ws.append(["PERGUNTA", "TIPO", "VALOR"])
+        ws.append(["URL", "", "https://forms.office.com/r/EXEMPLO"])
+        ws.append(["Nome completo", "texto", "Arthur Pereira"])
+        ws.append(["Turno", "opcao", "Diurno"])
+        ws.append(["Itens", "checkbox", "Pneus;Freios;Luzes"])
+        wb.save(xlsx)
+
+        parsed = FormsSubmitter.parse_reference_sheet(xlsx)
+        self.assertEqual(parsed.get("url"), "https://forms.office.com/r/EXEMPLO")
+        campos = parsed.get("campos", [])
+        self.assertEqual(len(campos), 3)  # URL nao entra como campo
+        perguntas = {c["pergunta"]: c for c in campos}
+        self.assertEqual(perguntas["Nome completo"]["valor"], "Arthur Pereira")
+        self.assertEqual(perguntas["Itens"]["valor"], "Pneus;Freios;Luzes")
+
+        # Layout de 2 COLUNAS (CAMPO | VALOR), SEM coluna TIPO — o formato real da
+        # planilha do usuario. A coluna B tem que virar VALOR (nao TIPO) e o tipo
+        # fica vazio (autodetectado no preenchimento). Sem linha de URL -> url None.
+        xlsx2 = os.path.join(self.temp_dir, "ref_forms_2col.xlsx")
+        wb2 = openpyxl.Workbook(); ws2 = wb2.active
+        ws2.append(["EMPRESA", "guarana dissel"])
+        ws2.append(["DATA DO SERVICO", 27])          # numero -> string "27"
+        ws2.append(["KM INICIAL", 14])
+        wb2.save(xlsx2)
+        p2 = FormsSubmitter.parse_reference_sheet(xlsx2)
+        self.assertIsNone(p2.get("url"))
+        c2 = {c["pergunta"]: c for c in p2.get("campos", [])}
+        self.assertEqual(len(c2), 3)
+        self.assertEqual(c2["EMPRESA"]["valor"], "guarana dissel")
+        self.assertEqual(c2["EMPRESA"]["tipo"], "")   # tipo NAO confundido com o valor
+        self.assertEqual(c2["DATA DO SERVICO"]["valor"], "27")
+        self.assertEqual(c2["KM INICIAL"]["valor"], "14")
+
+    def test_57_forms_module_degrades_without_crashing(self):
+        # O modulo NUNCA pode derrubar o app: import de playwright e adiado e
+        # is_available() retorna (bool, motivo) sem lancar excecao, mesmo se o
+        # Playwright/Edge nao existirem na maquina.
+        from core.forms_submitter import FormsSubmitter
+        ok, motivo = FormsSubmitter.is_available()
+        self.assertIsInstance(ok, bool)
+        self.assertIsInstance(motivo, str)
+        self.assertTrue(len(motivo) > 0)
+
+    def test_58_coletar_fotos_ignora_subpastas(self):
+        # Bug relatado pelo usuário: se a pasta da equipe tiver uma SUBPASTA
+        # (ex.: "mês anterior"), as fotos antigas dela NÃO podem entrar no
+        # relatório. A coleta deve ser NÃO-recursiva (glob, não rglob).
+        from minhas_habilidades import SophiaExecutor
+        from PIL import Image
+
+        base = os.path.join(self.temp_dir, "equipe_subpasta")
+        equipe = os.path.join(base, "EQUIPE A")
+        mes_ant = os.path.join(equipe, "mes anterior")
+        os.makedirs(mes_ant, exist_ok=True)
+
+        def mkimg(p):
+            Image.new("RGB", (16, 16), "white").save(p)
+
+        # fotos do mês atual — direto na pasta da equipe (DEVEM entrar)
+        mkimg(os.path.join(equipe, "1 ENTRADA.jpg"))
+        mkimg(os.path.join(equipe, "2 SAIDA.jpg"))
+        # fotos antigas na subpasta (NÃO devem entrar)
+        mkimg(os.path.join(mes_ant, "15 ENTRADA.jpg"))
+        mkimg(os.path.join(mes_ant, "16 SAIDA.png"))
+
+        ex = SophiaExecutor(autonomous_mode=False)
+        _, dias = ex._coletar_fotos_pasta(Path(equipe))
+
+        self.assertEqual(set(dias.keys()), {"1", "2"})
+        for d in ("15", "16"):
+            self.assertNotIn(d, dias, f"dia {d} (subpasta) não deveria ser coletado")
+        # nenhuma foto pode vir de dentro da subpasta
+        for tipos in dias.values():
+            for meta in tipos.values():
+                self.assertNotEqual(Path(meta["path"]).parent.name, "mes anterior")
+
+    def test_59_forms_novo_dom_escopo_anticolisao(self):
+        # MS Forms NOVO (forms.cloud.microsoft): blocos [data-automation-id=questionItem].
+        # Prova que _preencher_campo ESCOPA por bloco -> rotulo repetido ("N/A" em duas
+        # perguntas) marca o do bloco certo; e que valor com "/" nao quebra o seletor.
+        # Precisa de Playwright+Edge; se faltar, PULA (ambiente sem navegador).
+        from core.forms_submitter import FormsSubmitter
+        ok, motivo = FormsSubmitter.is_available()
+        if not ok:
+            self.skipTest("Playwright/Edge indisponivel: " + motivo)
+        html = (
+            '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+            '<div data-automation-id="questionItem"><div>1. EMPRESA</div>'
+            '<input id="in_e" type="text" data-automation-id="textInput"></div>'
+            '<div data-automation-id="questionItem"><div>2. CONTORNO ICONHA</div>'
+            '<span id="cs">SIM</span><input id="r_c_sim" type="radio" role="radio" name="c" aria-labelledby="cs">'
+            '<span id="cn">N/A</span><input id="r_c_na" type="radio" role="radio" name="c" aria-labelledby="cn"></div>'
+            '<div data-automation-id="questionItem"><div>3. INTERDICAO</div>'
+            '<span id="is">SIM</span><input id="r_i_sim" type="radio" role="radio" name="i" aria-labelledby="is">'
+            '<span id="ix">N/A</span><input id="r_i_na" type="radio" role="radio" name="i" aria-labelledby="ix"></div>'
+            '</body></html>')
+        page_path = Path(self.temp_dir) / "novo_forms.html"
+        page_path.write_text(html, encoding="utf-8")
+
+        campos = [
+            {"pergunta": "EMPRESA", "tipo": "", "valor": "guarana"},
+            {"pergunta": "CONTORNO ICONHA", "tipo": "", "valor": "SIM"},
+            {"pergunta": "INTERDICAO", "tipo": "", "valor": "N/A"},
+        ]
+        fs = FormsSubmitter(output_dir=self.temp_dir)
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            b = p.chromium.launch(channel="msedge", headless=True)
+            pg = b.new_context().new_page()
+            pg.goto(page_path.as_uri())
+            for c in campos:
+                self.assertTrue(fs._preencher_campo(pg, c), f"nao preencheu {c['pergunta']}")
+            st = pg.evaluate("""() => ({
+                e: document.getElementById('in_e').value,
+                c_sim: document.getElementById('r_c_sim').checked,
+                c_na: document.getElementById('r_c_na').checked,
+                i_sim: document.getElementById('r_i_sim').checked,
+                i_na: document.getElementById('r_i_na').checked,
+            })""")
+            b.close()
+        self.assertEqual(st["e"], "guarana")
+        self.assertTrue(st["c_sim"]); self.assertFalse(st["c_na"])   # CONTORNO marcou SIM
+        self.assertTrue(st["i_na"]); self.assertFalse(st["i_sim"])   # INTERDICAO marcou o SEU N/A
+
+    def test_60_forms_wide_multi_dia(self):
+        # Uso real: a planilha SEMPRE tem varios dias (~N combinacoes). Layout LARGO:
+        # 1a linha = titulos das perguntas; cada linha seguinte = 1 dia = 1 preenchimento.
+        # parse_reference_sheet_multi devolve UMA combinacao por dia, sem hardcode.
+        import openpyxl
+        from core.forms_submitter import FormsSubmitter
+
+        wb = openpyxl.Workbook(); ws = wb.active
+        ws.append(["URL", "", "https://forms.exemplo/x"])                  # linha de URL (nao e campo)
+        ws.append(["EMPRESA", "DATA DO SERVICO", "HORARIO", "KM INICIAL"])  # cabecalho (>=4 colunas)
+        ws.append(["guarana", "27/09/2026", "diurno", 14])                 # dia 1
+        ws.append(["cocacola", "28/09/2026", "noturno", 30])               # dia 2
+        ws.append(["pepsi", "29/09/2026", "diurno", 55])                   # dia 3
+        wide = os.path.join(self.temp_dir, "forms_wide.xlsx"); wb.save(wide)
+
+        plano = FormsSubmitter.parse_reference_sheet_multi(wide)
+        self.assertEqual(plano["url"], "https://forms.exemplo/x")
+        combos = plano["combinacoes"]
+        self.assertEqual(len(combos), 3, "3 dias -> 3 combinacoes")
+        d1 = {c["pergunta"]: c["valor"] for c in combos[0]}
+        self.assertEqual(d1["EMPRESA"], "guarana")
+        self.assertEqual(d1["DATA DO SERVICO"], "27/09/2026")
+        self.assertEqual(d1["KM INICIAL"], "14")                           # numero -> string
+        d2 = {c["pergunta"]: c["valor"] for c in combos[1]}
+        self.assertEqual(d2["EMPRESA"], "cocacola")
+        self.assertEqual(d2["HORARIO"], "noturno")
+        self.assertTrue(all(c["tipo"] == "" for c in combos[0]))           # tipo autodetectado depois
+
+        # VERTICAL (2 colunas) continua rendendo EXATAMENTE 1 combinacao
+        wb2 = openpyxl.Workbook(); ws2 = wb2.active
+        ws2.append(["EMPRESA", "guarana"])
+        ws2.append(["KM INICIAL", 14])
+        vert = os.path.join(self.temp_dir, "forms_vert.xlsx"); wb2.save(vert)
+        p2 = FormsSubmitter.parse_reference_sheet_multi(vert)
+        self.assertEqual(len(p2["combinacoes"]), 1, "vertical -> 1 combinacao")
+        self.assertEqual(len(p2["combinacoes"][0]), 2)
+
 if __name__ == "__main__":
     unittest.main()

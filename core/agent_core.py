@@ -7,9 +7,11 @@ from core.metadata_inspector import MetadataInspector
 from core.excel_engine import ExcelEngine
 
 # Carrega .env com prioridade sobre config.json
+# (ao lado do .exe quando congelado; raiz do projeto em dev)
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent.parent / ".env")
+    from core.paths import runtime_path
+    load_dotenv(runtime_path(".env"))
 except ImportError:
     pass
 
@@ -34,7 +36,8 @@ class SophiaAgentCore:
             "INJECT_FORMULA", "QUERY_EXCEL", "QUERY_COUNT_EMPTY",
             "FORMAT_EXCEL_COLUMNS", "IMPROVE_EXCEL_SENIOR",
             "PROCESSAR_FOTOS", "DATAS", "UPDATE_WHATSAPP",
-            "CONFIGURAR_PADRAO_FOTOS", "REGISTRAR_FATO_LTM"
+            "CONFIGURAR_PADRAO_FOTOS", "REGISTRAR_FATO_LTM",
+            "PREENCHER_FORMS"
         }
 
     def _load_config(self) -> dict:
@@ -255,6 +258,34 @@ class SophiaAgentCore:
                         resultados.append(f"✅ Padrão de fotos aprendido! Agora eu sei: {regras}")
                     except Exception as e:
                         resultados.append(f"❌ Falha ao aprender padrão: {e}")
+                    continue
+
+                elif intent == "PREENCHER_FORMS":
+                    # Preenche/marca um formulário web a partir de uma planilha de
+                    # referência e gera um PDF. Usa o Edge já instalado (self-contained).
+                    # Import adiado: não quebra o app se o Playwright não estiver presente.
+                    try:
+                        from core.forms_submitter import FormsSubmitter
+                        ref = (args.get("reference_path") or args.get("excel_path")
+                               or args.get("ultimo_arquivo"))
+                        form_url = args.get("form_url") or args.get("url")
+                        enviar = bool(args.get("submit", True))
+                        if not ref:
+                            resultados.append("⚠️ Preencher Forms: falta a planilha de referência.")
+                        else:
+                            # data(s) do serviço: aceita texto cru ('8', '8 a 20', '7 e 8')
+                            datas = args.get("datas") or args.get("data")
+                            fs = FormsSubmitter(output_dir=args.get("output_dir", "relatorios"))
+                            r = fs.fill_all_from_spreadsheet(ref, url=form_url, submit=enviar, datas=datas)
+                            pdfs = r.get("pdfs") or []
+                            if len(pdfs) == 1:
+                                resultados.append(r["msg"] + f" → {pdfs[0]}")
+                            elif pdfs:
+                                resultados.append(r["msg"] + f" → {len(pdfs)} PDFs")
+                            else:
+                                resultados.append(r["msg"])
+                    except Exception as e:
+                        resultados.append(f"❌ Falha no preenchimento do Forms: {e}")
                     continue
 
                 else:

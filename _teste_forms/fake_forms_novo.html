@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!-- Mock que imita o DOM do MS Forms NOVO (forms.cloud.microsoft):
+     blocos [data-automation-id=questionItem], texto via data-automation-id=textInput,
+     rádios com rótulo via aria-labelledby, e o rótulo "N/A" REPETIDO em duas
+     perguntas (CONTORNO e INTERDIÇÃO) para provar que o escopo por bloco evita colisão.
+     Serve para testar _preencher_campo OFFLINE, sem tocar no formulário real. -->
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Mock Forms Novo</title></head>
+<body>
+  <div data-automation-id="questionItem">
+    <div class="question-title-box">1. EMPRESA</div>
+    <input id="in_empresa" type="text" data-automation-id="textInput"
+           aria-label="Texto de linha única" placeholder="Insira sua resposta">
+  </div>
+
+  <div data-automation-id="questionItem">
+    <div class="question-title-box">3. DATA DO SERVIÇO</div>
+    <input id="in_data" type="text" role="combobox"
+           aria-label="Seletor de data" placeholder="Insira a data (dd/MM/yyyy)">
+  </div>
+
+  <div data-automation-id="questionItem">
+    <div class="question-title-box">4. HORÁRIO DO SERVIÇO</div>
+    <span id="lbl_h_d">diurno</span>
+    <input id="r_h_diurno" type="radio" role="radio" name="h" aria-labelledby="lbl_h_d">
+    <span id="lbl_h_n">noturno</span>
+    <input id="r_h_noturno" type="radio" role="radio" name="h" aria-labelledby="lbl_h_n">
+  </div>
+
+  <div data-automation-id="questionItem">
+    <div class="question-title-box">8. CONTORNO ICONHA?</div>
+    <span id="lbl_c_sim">SIM</span>
+    <input id="r_c_sim" type="radio" role="radio" name="c" aria-labelledby="lbl_c_sim">
+    <span id="lbl_c_na">N/A</span>
+    <input id="r_c_na" type="radio" role="radio" name="c" aria-labelledby="lbl_c_na">
+  </div>
+
+  <div data-automation-id="questionItem">
+    <div class="question-title-box">10. INTERDIÇÃO</div>
+    <span id="lbl_i_sim">SIM</span>
+    <input id="r_i_sim" type="radio" role="radio" name="i" aria-labelledby="lbl_i_sim">
+    <span id="lbl_i_na">N/A</span>
+    <input id="r_i_na" type="radio" role="radio" name="i" aria-labelledby="lbl_i_na">
+  </div>
+
+  <div data-automation-id="questionItem">
+    <div class="question-title-box">6. KM INICIAL</div>
+    <input id="in_km" type="text" data-automation-id="textInput"
+           aria-label="Texto de linha única" placeholder="Insira sua resposta">
+  </div>
+</body></html>
